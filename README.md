@@ -179,7 +179,7 @@ Restart QGIS or reload the plugin with a plugin-reloading tool during developmen
 
 ## Changelog
 
-### Version 1.2.1
+### Version 1.2.2
 
 - Declared compatibility with QGIS 3.28 through QGIS 4.99.
 - Added `supportsQt6=True` for QGIS 4 and Qt 6.
@@ -310,3 +310,18 @@ The plugin has no external Python package dependency. It uses `ogr2ogr` and
 The installable ZIP contains only the plugin source code, documentation,
 licence and image resources. It does not include executables or compiled
 libraries.
+
+## Security
+
+Version 1.2.2 hardens all external GDAL execution:
+
+- only the absolute `ogr2ogr` and `ogrinfo` paths detected from the active
+  QGIS environment are allowed;
+- command arguments are passed as a sequence and `shell=False` is explicit;
+- null bytes and unsupported argument types are rejected;
+- merged-output provenance is written with the GDAL/OGR Python API instead
+  of dynamically constructed SQL;
+- failures while terminating a cancelled process are logged rather than
+  silently ignored.
+
+Security issues should be reported according to [`SECURITY.md`](SECURITY.md).

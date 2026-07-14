@@ -42,12 +42,12 @@ The plugin is useful for processing GPS data collected by field teams, including
 
 ## Compatibility
 
-| Component        | Supported version                                          |
-| ---------------- | ---------------------------------------------------------- |
-| QGIS             | 3.28 to 4.x                                                |
-| Qt               | Qt 5 and Qt 6                                              |
+| Component | Supported version |
+|---|---|
+| QGIS | 3.28 to 4.x |
+| Qt | Qt 5 and Qt 6 |
 | Operating system | Windows, Linux and macOS, subject to the QGIS installation |
-| Output format    | ESRI Shapefile                                             |
+| Output format | ESRI Shapefile |
 
 The plugin metadata declares:
 
@@ -140,14 +140,14 @@ gpx_batch_converter/
 └── README.md
 ```
 
-| File             | Purpose                                           |
-| ---------------- | ------------------------------------------------- |
-| `__init__.py`  | Provides the QGIS`classFactory()` entry point.  |
-| `plugin.py`    | Registers the menu and toolbar action.            |
-| `dialog.py`    | Contains the user interface and conversion logic. |
-| `metadata.txt` | Defines plugin metadata and QGIS compatibility.   |
-| `icon.png`     | Plugin icon used in QGIS.                         |
-| `LICENSE`      | MIT licence.                                      |
+| File | Purpose |
+|---|---|
+| `__init__.py` | Provides the QGIS `classFactory()` entry point. |
+| `plugin.py` | Registers the menu and toolbar action. |
+| `dialog.py` | Contains the user interface and conversion logic. |
+| `metadata.txt` | Defines plugin metadata and QGIS compatibility. |
+| `icon.png` | Plugin icon used in QGIS. |
+| `LICENSE` | MIT licence. |
 
 ## Development
 
@@ -165,7 +165,7 @@ No external Python package is required beyond the libraries included with QGIS.
 Clone the repository into the QGIS plugin directory:
 
 ```bash
-git clone https://github.com/Jubilio/gpx-batch-converter.git gpx_batch_converter
+git clone https://github.com/YOUR-USERNAME/gpx-batch-converter.git gpx_batch_converter
 ```
 
 Restart QGIS or reload the plugin with a plugin-reloading tool during development.
@@ -179,7 +179,7 @@ Restart QGIS or reload the plugin with a plugin-reloading tool during developmen
 
 ## Changelog
 
-### Version 1.2.1
+### Version 1.2.2
 
 - Declared compatibility with QGIS 3.28 through QGIS 4.99.
 - Added `supportsQt6=True` for QGIS 4 and Qt 6.
@@ -228,12 +228,13 @@ When reporting a problem, include:
 
 ## Author
 
-**Jubilio Filiano Mausse**
+**Jubilio Filiano Mausse**  
 GIS, data management and remote-sensing professional.
 
 ## Licence
 
 This project is licensed under the **MIT License**. See the [`LICENSE`](LICENSE) file for details.
+
 
 ## Version 1.1.0
 
@@ -310,3 +311,18 @@ The plugin has no external Python package dependency. It uses `ogr2ogr` and
 The installable ZIP contains only the plugin source code, documentation,
 licence and image resources. It does not include executables or compiled
 libraries.
+
+## Security
+
+Version 1.2.2 hardens all external GDAL execution:
+
+- only the absolute `ogr2ogr` and `ogrinfo` paths detected from the active
+  QGIS environment are allowed;
+- command arguments are passed as a sequence and `shell=False` is explicit;
+- null bytes and unsupported argument types are rejected;
+- merged-output provenance is written with the GDAL/OGR Python API instead
+  of dynamically constructed SQL;
+- failures while terminating a cancelled process are logged rather than
+  silently ignored.
+
+Security issues should be reported according to [`SECURITY.md`](SECURITY.md).

@@ -7,6 +7,8 @@ import sys
 import tempfile
 import time
 
+from osgeo import ogr
+
 from qgis.PyQt.QtCore import pyqtSignal
 from qgis.core import QgsApplication, QgsTask
 
@@ -211,22 +213,78 @@ class GpxConversionTask(QgsTask):
         try:
             process.terminate()
             process.wait(timeout=2)
-        except Exception:
-            try:
-                process.kill()
-            except Exception:
-                pass
+            return
+        except (OSError, subprocess.SubprocessError) as terminate_error:
+            self.messageEmitted.emit(
+                "The GDAL process did not terminate cleanly: "
+                f"{terminate_error}. Attempting a forced stop."
+            )
+
+        try:
+            process.kill()
+            process.wait(timeout=2)
+        except (OSError, subprocess.SubprocessError) as kill_error:
+            self.messageEmitted.emit(
+                "The GDAL process could not be forcibly stopped: "
+                f"{kill_error}"
+            )
+
+    def _validate_gdal_command(self, command):
+        """
+        Validate a GDAL command before execution.
+
+        Only the previously discovered absolute paths to ogr2ogr and
+        ogrinfo are permitted. Arguments are passed as a sequence with
+        shell=False, so they are never interpreted by a command shell.
+        """
+        if not isinstance(command, (list, tuple)) or not command:
+            raise ValueError("The GDAL command must be a non-empty sequence.")
+
+        allowed_executables = {
+            str(Path(self.ogr2ogr).resolve()),
+            str(Path(self.ogrinfo).resolve()),
+        }
+
+        executable = str(Path(command[0]).resolve())
+        if executable not in allowed_executables:
+            raise ValueError(
+                "Execution was blocked because the command does not use "
+                "an approved GDAL executable."
+            )
+
+        validated = []
+        for argument in command:
+            if not isinstance(argument, (str, os.PathLike)):
+                raise TypeError(
+                    "Every GDAL command argument must be a string or path."
+                )
+
+            value = str(argument)
+            if "\x00" in value:
+                raise ValueError(
+                    "A GDAL command argument contains a null byte."
+                )
+
+            validated.append(value)
+
+        return tuple(validated)
 
     def _run_process(self, command):
         """
-        Run one GDAL command while checking for task cancellation.
+        Run one validated GDAL command while checking for cancellation.
         """
+        validated_command = self._validate_gdal_command(command)
+
         creation_flags = 0
         if os.name == "nt" and hasattr(subprocess, "CREATE_NO_WINDOW"):
             creation_flags = subprocess.CREATE_NO_WINDOW
 
-        process = subprocess.Popen(
-            command,
+        # Security: the executable is restricted to validated absolute GDAL
+        # paths, arguments are passed as a tuple, and shell execution is
+        # explicitly disabled.  # nosec B603
+        process = subprocess.Popen(  # nosec B603
+            validated_command,
+            shell=False,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
@@ -265,10 +323,6 @@ class GpxConversionTask(QgsTask):
             cleaned.strip(),
         )
         return cleaned[:80] or fallback
-
-    @staticmethod
-    def _escape_sql_string(value):
-        return str(value).replace("'", "''")
 
     def _record(
         self,
@@ -469,18 +523,12 @@ class GpxConversionTask(QgsTask):
         destination_layer,
         layer_already_created,
     ):
-        source_file = self._escape_sql_string(gpx_file.name)
-        source_path = self._escape_sql_string(gpx_file)
-        source_layer_text = self._escape_sql_string(source_layer)
+        """
+        Build a direct GPX-to-GeoPackage append command.
 
-        sql = (
-            f'SELECT *, '
-            f"'{source_file}' AS source_file, "
-            f"'{source_path}' AS source_path, "
-            f"'{source_layer_text}' AS source_layer "
-            f'FROM "{source_layer}"'
-        )
-
+        No SQL statement is constructed. Source provenance is added after
+        the append through the GDAL/OGR Python API.
+        """
         command = [
             self.ogr2ogr,
             "-f",
@@ -498,16 +546,84 @@ class GpxConversionTask(QgsTask):
             [
                 str(staging_path),
                 str(gpx_file),
-                "-dialect",
-                "SQLite",
-                "-sql",
-                sql,
+                source_layer,
                 "-nln",
                 destination_layer,
             ]
         )
 
         return command
+
+    @staticmethod
+    def _ensure_text_field(layer, field_name):
+        """Create a text field when it is not already present."""
+        if layer.FindFieldIndex(field_name, True) >= 0:
+            return
+
+        field_definition = ogr.FieldDefn(field_name, ogr.OFTString)
+        field_definition.SetWidth(254)
+
+        result = layer.CreateField(field_definition)
+        if result != ogr.OGRERR_NONE:
+            raise RuntimeError(
+                f"Could not create the provenance field: {field_name}"
+            )
+
+    def _set_unassigned_provenance(
+        self,
+        staging_path,
+        layer_name,
+        gpx_file,
+        source_layer,
+    ):
+        """
+        Set provenance fields on features added by the latest append.
+
+        Features already processed have a non-empty source_file value and
+        are left unchanged. This avoids dynamic SQL and preserves traceability.
+        """
+        dataset = ogr.Open(str(staging_path), update=1)
+        if dataset is None:
+            raise RuntimeError(
+                f"Could not open the staging GeoPackage: {staging_path}"
+            )
+
+        try:
+            layer = dataset.GetLayerByName(layer_name)
+            if layer is None:
+                raise RuntimeError(
+                    f"Could not open the staging layer: {layer_name}"
+                )
+
+            provenance_values = {
+                "source_file": gpx_file.name,
+                "source_path": str(gpx_file),
+                "source_layer": source_layer,
+            }
+
+            for field_name in provenance_values:
+                self._ensure_text_field(layer, field_name)
+
+            layer.ResetReading()
+            for feature in layer:
+                existing_source = feature.GetField("source_file")
+                if existing_source not in (None, ""):
+                    continue
+
+                for field_name, value in provenance_values.items():
+                    feature.SetField(field_name, value)
+
+                result = layer.SetFeature(feature)
+                if result != ogr.OGRERR_NONE:
+                    raise RuntimeError(
+                        "Could not update provenance fields for a "
+                        f"feature in {layer_name}."
+                    )
+
+            layer.SyncToDisk()
+            dataset.FlushCache()
+        finally:
+            dataset = None
 
     def _run_individual(self):
         total_steps = len(self.gpx_files) * (
@@ -776,6 +892,29 @@ class GpxConversionTask(QgsTask):
                                 return False
 
                             if return_code == 0:
+                                try:
+                                    self._set_unassigned_provenance(
+                                        staging_path,
+                                        layer_name,
+                                        gpx_file,
+                                        layer_name,
+                                    )
+                                except RuntimeError as provenance_error:
+                                    self._record(
+                                        gpx_file.name,
+                                        layer_name,
+                                        "Failed",
+                                        feature_count=feature_count,
+                                        message=str(provenance_error),
+                                    )
+                                    self.summary["failed"] += 1
+                                    completed_steps += 1
+                                    self._advance_progress(
+                                        completed_steps,
+                                        total_steps,
+                                    )
+                                    continue
+
                                 layer_created = True
                                 total_features += feature_count
                                 included_sources += 1

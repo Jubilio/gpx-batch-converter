@@ -8,7 +8,7 @@ Contributions, bug reports and documentation improvements are welcome.
 2. Copy or link the `gpx_batch_converter` folder into the active QGIS
    profile's `python/plugins` directory.
 3. Enable the plugin in QGIS.
-4. Use the sample file in `test_data/sample_complete.gpx` for a basic test.
+4. Use the sample file in `test_data/test_data.gpx` for a basic test.
 5. Confirm that the plugin works without errors in the supported QGIS
    version before opening a pull request.
 

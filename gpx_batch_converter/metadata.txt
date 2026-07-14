@@ -3,7 +3,7 @@ name=GPX Batch Converter
 qgisMinimumVersion=3.28
 qgisMaximumVersion=4.99
 description=Batch-converts GPX layers to Shapefile, GeoPackage, GeoJSON, KML or CSV, with optional merging, background processing, cancellation and detailed results.
-version=1.2.1
+version=1.2.2
 author=Jubilio Filiano Mausse
 email=jubiliomausse5@gmail.com
 
@@ -22,7 +22,13 @@ tracker=https://github.com/Jubilio/gpx-batch-converter/issues
 repository=https://github.com/Jubilio/gpx-batch-converter
 homepage=https://github.com/Jubilio/gpx-batch-converter#readme
 
-changelog=1.2.1 (2026-07-14)
+changelog=1.2.2 (2026-07-14)
+    - Removed dynamic SQL construction from merged output processing.
+    - Restricted subprocess execution to validated absolute GDAL paths.
+    - Explicitly disabled shell execution for every GDAL subprocess.
+    - Replaced silent exception handling with logged termination errors.
+    - Added security documentation.
+    1.2.1 (2026-07-14)
     - Added complete QGIS Plugin Repository metadata links.
     - Updated the About text with formats, background processing, cancellation and dependency information.
     - Added a publication-ready changelog and contact email.

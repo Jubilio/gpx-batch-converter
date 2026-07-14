@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.2.2 — 2026-07-14
+
+### Security hardening
+
+- Removed dynamic SQL construction from merged-output processing.
+- Added provenance fields through the GDAL/OGR Python API.
+- Restricted subprocess execution to the discovered absolute paths of
+  `ogr2ogr` and `ogrinfo`.
+- Explicitly set `shell=False` and pass command arguments as a tuple.
+- Reject non-string arguments and null bytes before command execution.
+- Replaced silent process-termination exceptions with explicit log messages.
+
 All notable changes to GPX Batch Converter are documented here.
 
 ## 1.2.1 — 2026-07-14
