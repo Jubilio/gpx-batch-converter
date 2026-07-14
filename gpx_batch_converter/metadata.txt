@@ -1,0 +1,45 @@
+[general]
+name=GPX Batch Converter
+qgisMinimumVersion=3.28
+qgisMaximumVersion=4.99
+description=Batch-converts GPX layers to Shapefile, GeoPackage, GeoJSON, KML or CSV, with optional merging, background processing, cancellation and detailed results.
+version=1.2.1
+author=Jubilio Filiano Mausse
+email=jubiliomausse5@gmail.com
+
+about=GPX Batch Converter processes all GPX files in a selected folder and converts waypoints, routes, route points, tracks and track points to common GIS formats.
+    Features include:
+    * Batch conversion of GPX sublayers.
+    * ESRI Shapefile, GeoPackage, GeoJSON, KML and CSV/WKT output.
+    * Optional merging into one output per GPX layer type.
+    * Background execution through the QGIS Task Manager.
+    * Safe cancellation of active GDAL operations.
+    * Detailed results panel and UTF-8 CSV report export.
+    * Source provenance fields in merged outputs.
+    The plugin has no external Python package dependencies. It requires ogr2ogr and ogrinfo from the GDAL installation bundled with or available to the active QGIS environment. It is intended for Windows, Linux and macOS.
+
+tracker=https://github.com/Jubilio/gpx-batch-converter/issues
+repository=https://github.com/Jubilio/gpx-batch-converter
+homepage=https://github.com/Jubilio/gpx-batch-converter#readme
+
+changelog=1.2.1 (2026-07-14)
+    - Added complete QGIS Plugin Repository metadata links.
+    - Updated the About text with formats, background processing, cancellation and dependency information.
+    - Added a publication-ready changelog and contact email.
+    1.2.0 (2026-07-14)
+    - Added a detailed results panel and CSV report export.
+    - Added Shapefile, GeoPackage, GeoJSON, KML and CSV/WKT output.
+    - Added cancellable background processing using the QGIS Task Manager.
+    1.1.0 (2026-07-14)
+    - Added merged outputs and source provenance fields.
+    1.0.3 (2026-07-14)
+    - Added QGIS 4 and Qt 6 compatibility metadata.
+    - Fixed the completion notification error.
+
+category=Vector
+tags=gpx,gps,shapefile,geopackage,geojson,kml,csv,tracks,waypoints,batch,conversion,merge,background
+experimental=False
+deprecated=False
+hasProcessingProvider=False
+supportsQt6=True
+icon=icon.png

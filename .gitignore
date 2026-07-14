@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# QGIS/Python build artefacts
+ui_*.py
+resources_rc.py
+*.qm
+
+# Editors and operating systems
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Packaging output
+dist/
+build/
+*.egg-info/
+
+# Local test outputs
+test_output/
+*.gpkg
+*.shp
+*.shx
+*.dbf
+*.prj
+*.cpg
+*.qpj
+*.geojson
+*.kml
+*.csv
+*.csvt
