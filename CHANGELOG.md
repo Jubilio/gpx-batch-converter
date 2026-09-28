@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.3.0 — 2026-09-28
+
+- Added numeric latitude/longitude attributes to all GPX point layers.
+- Added start/end latitude/longitude attributes to routes and tracks,
+  including multipart tracks in their original segment order.
+- Included coordinate fields in all five output formats and both
+  individual and merged conversion modes, using WGS 84 decimal degrees.
+- Preserved null coordinates for missing or empty geometry and added
+  cancellation checks during coordinate population.
+
 ## 1.2.2 — 2026-07-14
 
 ### Security hardening

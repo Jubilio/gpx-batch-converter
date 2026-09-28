@@ -57,6 +57,52 @@ SHAPEFILE_COMPONENTS = (
 )
 
 
+COORDINATE_FIELDS = {
+    "waypoints": ("latitude", "longitude"),
+    "route_points": ("latitude", "longitude"),
+    "track_points": ("latitude", "longitude"),
+    "routes": ("start_lat", "start_lon", "end_lat", "end_lon"),
+    "tracks": ("start_lat", "start_lon", "end_lat", "end_lon"),
+}
+
+
+def coordinate_values(geometry, source_layer):
+    """Read WGS 84 coordinates from GPX geometry without changing it.
+
+    For multipart tracks, use the first and last vertices of the first
+    and last non-empty segments, following their original GPX order.
+    """
+    if geometry is None or geometry.IsEmpty():
+        return (None,) * len(COORDINATE_FIELDS[source_layer])
+
+    geometry_type = ogr.GT_Flatten(geometry.GetGeometryType())
+    if source_layer in ("waypoints", "route_points", "track_points"):
+        if geometry_type != ogr.wkbPoint:
+            raise RuntimeError(f"Expected a point geometry in {source_layer}.")
+        longitude, latitude = geometry.GetPoint_2D(0)
+        return latitude, longitude
+
+    if geometry_type == ogr.wkbLineString:
+        first_segment = last_segment = geometry
+    elif geometry_type == ogr.wkbMultiLineString:
+        segments = [
+            geometry.GetGeometryRef(index)
+            for index in range(geometry.GetGeometryCount())
+            if not geometry.GetGeometryRef(index).IsEmpty()
+        ]
+        if not segments:
+            return (None,) * 4
+        first_segment, last_segment = segments[0], segments[-1]
+    else:
+        raise RuntimeError(f"Expected a line geometry in {source_layer}.")
+
+    start_lon, start_lat = first_segment.GetPoint_2D(0)
+    end_lon, end_lat = last_segment.GetPoint_2D(
+        last_segment.GetPointCount() - 1
+    )
+    return start_lat, start_lon, end_lat, end_lon
+
+
 def task_can_cancel_flag():
     """Return the cancellable-task flag in QGIS 3 or QGIS 4."""
     scoped_flag = getattr(QgsTask, "Flag", None)
@@ -625,6 +671,88 @@ class GpxConversionTask(QgsTask):
         finally:
             dataset = None
 
+    def _set_coordinate_attributes(self, staging_path, layer_name):
+        """Populate numeric fields before export, including read-only formats.
+
+        Only GPX-derived staging layers are passed here: their coordinates
+        are already WGS 84 longitude/X and latitude/Y. Return False when
+        cancelled so a partially populated layer is never published.
+        """
+        dataset = ogr.Open(str(staging_path), update=1)
+        if dataset is None:
+            raise RuntimeError(f"Could not open staging data: {staging_path}")
+
+        transaction_started = False
+        layer = feature = None
+        try:
+            layer = dataset.GetLayerByName(layer_name)
+            if layer is None:
+                raise RuntimeError(f"Could not open staging layer: {layer_name}")
+
+            field_names = COORDINATE_FIELDS[layer_name]
+            for field_name in field_names:
+                # Do not silently overwrite a similarly named GPX extension.
+                if layer.FindFieldIndex(field_name, False) >= 0:
+                    raise RuntimeError(
+                        f"Coordinate field already exists: {field_name}"
+                    )
+                field = ogr.FieldDefn(field_name, ogr.OFTReal)
+                if layer.CreateField(field) != ogr.OGRERR_NONE:
+                    raise RuntimeError(
+                        f"Could not create coordinate field: {field_name}"
+                    )
+
+            if layer.StartTransaction() != ogr.OGRERR_NONE:
+                raise RuntimeError("Could not start coordinate update transaction.")
+            transaction_started = True
+            layer.ResetReading()
+            for feature in layer:
+                if self.isCanceled() or self.cancelled:
+                    self.summary["cancelled"] = True
+                    return False
+
+                values = coordinate_values(feature.GetGeometryRef(), layer_name)
+                for field_name, value in zip(field_names, values):
+                    if value is not None:
+                        feature.SetField(field_name, value)
+                if layer.SetFeature(feature) != ogr.OGRERR_NONE:
+                    raise RuntimeError(
+                        f"Could not update coordinates in {layer_name}."
+                    )
+
+            if layer.CommitTransaction() != ogr.OGRERR_NONE:
+                raise RuntimeError("Could not save coordinate attributes.")
+            transaction_started = False
+            return True
+        finally:
+            if transaction_started:
+                layer.RollbackTransaction()
+            feature = layer = None
+            dataset = None
+
+    def _convert_individual_layer(
+        self, gpx_file, layer_name, output_path, output_layer
+    ):
+        """Stage attributes in GeoPackage before converting to any format."""
+        with tempfile.TemporaryDirectory(prefix="gpx_coordinates_") as folder:
+            staging_path = Path(folder) / "coordinates.gpkg"
+            command = self._stage_append_command(
+                staging_path, gpx_file, layer_name, layer_name, False
+            )
+            result = self._run_process(command)
+            if result[0] != 0 or result[3]:
+                return result
+            try:
+                if not self._set_coordinate_attributes(staging_path, layer_name):
+                    return None, "", "Cancelled", True
+            except RuntimeError as error:
+                return 1, "", str(error), False
+            if self.isCanceled() or self.cancelled:
+                return None, "", "Cancelled", True
+            return self._run_process(self._translate_command(
+                staging_path, layer_name, output_path, output_layer
+            ))
+
     def _run_individual(self):
         total_steps = len(self.gpx_files) * (
             len(self.selected_layers) + 1
@@ -711,15 +839,13 @@ class GpxConversionTask(QgsTask):
                         fallback=layer_name,
                     )
 
-                    command = self._translate_command(
-                        gpx_file,
-                        layer_name,
-                        output_path,
-                        output_layer,
-                    )
-
                     return_code, stdout, stderr, was_cancelled = (
-                        self._run_process(command)
+                        self._convert_individual_layer(
+                            gpx_file,
+                            layer_name,
+                            output_path,
+                            output_layer,
+                        )
                     )
 
                     if was_cancelled:
@@ -952,6 +1078,23 @@ class GpxConversionTask(QgsTask):
                     )
 
                 if layer_created:
+                    try:
+                        if not self._set_coordinate_attributes(
+                            staging_path, layer_name
+                        ):
+                            return False
+                    except RuntimeError as coordinate_error:
+                        self._record(
+                            "ALL FILES",
+                            layer_name,
+                            "Failed",
+                            feature_count=total_features,
+                            message=str(coordinate_error),
+                        )
+                        self.summary["failed"] += 1
+                        # Do not copy a partially populated layer into a
+                        # merged GeoPackage, which publishes the whole file.
+                        return False
                     built_layers[layer_name] = {
                         "features": total_features,
                         "sources": included_sources,

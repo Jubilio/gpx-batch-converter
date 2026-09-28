@@ -12,7 +12,7 @@
   <img alt="QGIS" src="https://img.shields.io/badge/QGIS-3.28%20to%204.x-589632?logo=qgis&logoColor=white">
   <img alt="Python" src="https://img.shields.io/badge/Python-PyQGIS-3776AB?logo=python&logoColor=white">
   <img alt="License" src="https://img.shields.io/badge/License-MIT-blue.svg">
-  <img alt="Version" src="https://img.shields.io/badge/Version-1.0.3-orange.svg">
+  <img alt="Version" src="https://img.shields.io/badge/Version-1.3.0-orange.svg">
 </p>
 
 ## Overview
@@ -106,6 +106,34 @@ Restart QGIS and enable the plugin from **Manage and Install Plugins**.
 7. Click **Convert**.
 
 The progress bar and log panel show the current file, completed outputs, skipped layers and errors.
+
+## Coordinate attributes
+
+Every newly converted feature includes numeric WGS 84 (EPSG:4326)
+coordinates in decimal degrees, in both individual and merged outputs.
+
+| GPX layer | Added fields | Meaning |
+| --- | --- | --- |
+| `waypoints`, `route_points`, `track_points` | `latitude`, `longitude` | Position of each point |
+| `routes`, `tracks` | `start_lat`, `start_lon`, `end_lat`, `end_lon` | First and last vertices of each line |
+
+For tracks with multiple segments, the endpoints follow the original GPX
+segment order, ignoring empty segments. To obtain the coordinates of every
+vertex, also export `route_points` or `track_points`. Features with missing
+or empty geometry receive null coordinate values.
+
+The fields are included in Shapefile, GeoPackage, GeoJSON, KML and CSV
+outputs. Their names fit the Shapefile 10-character limit. Coordinates use
+double-precision numeric fields; display precision depends on the output
+format and QGIS settings. Existing geometry, elevation and other source
+attributes are preserved. Coordinate fields are calculated at
+conversion time; they do not update automatically after geometry edits.
+Reconvert existing outputs with **Overwrite** enabled to add these fields.
+
+KML stores the fields in `ExtendedData`. Displaying them in an attribute
+table requires a reader that supports those fields, such as GDAL's LIBKML
+driver; the basic KML reader may omit them. Use GeoPackage or Shapefile if
+your QGIS installation does not expose KML extended attributes.
 
 ## Output naming
 
