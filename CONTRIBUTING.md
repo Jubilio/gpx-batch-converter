@@ -20,3 +20,17 @@ Contributions, bug reports and documentation improvements are welcome.
   ZIP releases.
 - Keep GDAL subprocess calls cancellable.
 - Do not access QGIS GUI objects from a background task.
+
+## Coordinate regression tests
+
+With the GDAL Python bindings, `ogr2ogr` and `ogrinfo` available, run:
+
+```bash
+python -m unittest discover -s tests -v
+```
+
+The tests exercise all five output formats in individual and merged modes,
+including multipart endpoints, coordinate precision, null geometries,
+cancellation rollback and preservation of source attributes. If QGIS is
+unavailable, only its task/signal wrapper is stubbed; GDAL conversions are
+real. A manual check inside QGIS is still required before release.
